@@ -1,0 +1,3 @@
+defaults:
+  - trainer: ddp_trainer
+  - model: dolly_base_model

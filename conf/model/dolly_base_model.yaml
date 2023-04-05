@@ -1,0 +1,5 @@
+defaults:
+  - base_model: EleutherAI-gpt-j-6B
+  - tokenizer: EleutherAI-gpt-j-6B
+
+_target_: training.model.HFPreTrainedModel

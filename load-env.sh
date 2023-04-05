@@ -9,6 +9,6 @@ while [ -L "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symli
 done
 DIR=$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )
 
-module load 2022 Python/3.11.2-GCCcore-12.2.0-bare cuDNN/8.7.0.84-CUDA-11.8.0
+module load 2022 Python/3.10.4-GCCcore-11.3.0-bare cuDNN/8.7.0.84-CUDA-11.8.0
 
 source $DIR/.venv/bin/activate

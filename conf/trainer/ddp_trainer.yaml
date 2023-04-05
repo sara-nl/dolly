@@ -1,0 +1,8 @@
+defaults:
+  - default_trainer
+  - strategy: ddp_strategy
+
+benchmark: True
+precision: 16
+
+sync_batchnorm: null

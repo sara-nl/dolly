@@ -1,0 +1,4 @@
+defaults:
+  - base_automodel
+
+pretrained_model_name_or_path: "EleutherAI/gpt-j-6B"

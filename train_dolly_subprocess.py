@@ -1,4 +1,7 @@
 import logging
+from subprocess import run
+from pathlib import Path
+
 
 logging.basicConfig(
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s", level=logging.INFO, datefmt="%Y-%m-%d %H:%M:%S"
@@ -10,11 +13,15 @@ logging.getLogger("sh.command").setLevel(logging.ERROR)
 
 import os
 from datetime import datetime
-from training.trainer import load_training_dataset, load_tokenizer
+from training.utils_old import load_training_dataset, load_tokenizer
+
+# COMMAND ----------
 
 # Cache data and tokenizer locally before creating a bunch of deepspeed processes and make sure they succeeds.
 load_training_dataset()
 load_tokenizer()
+
+# COMMAND ----------
 
 timestamp = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 model_name = "dolly"
@@ -32,8 +39,6 @@ os.makedirs(local_training_root, exist_ok=True)
 
 local_output_dir = os.path.join(local_training_root, checkpoint_dir_name)
 
-#num_gpus_flag = f"--num_gpus={num_gpus}"
-
 tensorboard_display_dir = f"{local_output_dir}/runs"
 
 print(f"Local Output Dir: {local_output_dir}")
@@ -41,23 +46,22 @@ print(f"Tensorboard Display Dir: {tensorboard_display_dir}")
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-# COMMAND ----------
 
-# MAGIC %load_ext tensorboard
-# MAGIC %tensorboard --logdir '{tensorboard_display_dir}'
+num_gpus = 1
 
-# COMMAND ----------
 
-# MAGIC !deepspeed {num_gpus_flag} \
-# MAGIC     --module training.trainer \
-# MAGIC     --deepspeed {deepspeed_config} \
-# MAGIC     --epochs 1 \
-# MAGIC     --local-output-dir {local_output_dir} \
-# MAGIC     --per-device-train-batch-size 8 \
-# MAGIC     --per-device-eval-batch-size 8 \
-# MAGIC     --lr 1e-5
-
-# COMMAND ----------
+current_filepath = str(Path(os.path.realpath(__file__)).parent)
+run(" ".join([
+    f"HF_DATASETS_CACHE={current_filepath}/.cache/huggingface/datasets/",
+    "deepspeed",
+    "--module", "training.trainer",
+    "--deepspeed", f"{deepspeed_config}",
+    "--epochs", "1",
+    "--local-output-dir", f"{local_output_dir}",
+    "--per-device-train-batch-size", "8",
+    "--per-device-eval-batch-size", "8",
+    "--lr", "1e-5",
+]), shell=True)
 
 from training.generate import generate_response, load_model_tokenizer_for_generate
 
@@ -79,3 +83,4 @@ for instruction in instructions:
     response = generate_response(instruction, model=model, tokenizer=tokenizer)
     if response:
         print(f"Instruction: {instruction}\n\n{response}\n\n-----------\n")
+
