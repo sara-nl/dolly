@@ -195,8 +195,6 @@ def train(
         output_dir=local_output_dir,
         per_device_train_batch_size=per_device_train_batch_size,
         per_device_eval_batch_size=per_device_eval_batch_size,
-        fp16=False,
-        bf16=bf16,
         learning_rate=lr,
         num_train_epochs=epochs,
         deepspeed=deepspeed,
@@ -214,7 +212,12 @@ def train(
         disable_tqdm=True,
         remove_unused_columns=False,
         local_rank=local_rank,
-    )
+        
+        # Changed by RJS
+        torch_compile=True,
+        fp16=False,
+        bf16=True,
+)
 
     logger.info("Instantiating Trainer")
 

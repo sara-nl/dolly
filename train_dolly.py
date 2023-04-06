@@ -1,50 +1,7 @@
-# Databricks notebook source
-# MAGIC %md
-# MAGIC ## Train Dolly
-# MAGIC
-# MAGIC This fine-tunes the [GPT-J 6B](https://huggingface.co/EleutherAI/gpt-j-6B) model on
-# MAGIC the [Alpaca](https://huggingface.co/datasets/tatsu-lab/alpaca) dataset.
-# MAGIC
-# MAGIC ```
-# MAGIC   Licensed under the Apache License, Version 2.0 (the "License");
-# MAGIC   you may not use this file except in compliance with the License.
-# MAGIC   You may obtain a copy of the License at
-# MAGIC
-# MAGIC       http://www.apache.org/licenses/LICENSE-2.0
-# MAGIC
-# MAGIC   Unless required by applicable law or agreed to in writing, software
-# MAGIC   distributed under the License is distributed on an "AS IS" BASIS,
-# MAGIC   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# MAGIC   See the License for the specific language governing permissions and
-# MAGIC   limitations under the License.
-# MAGIC ```
-# MAGIC
-# MAGIC Please note that while GPT-J 6B is [Apache 2.0 licensed](https://huggingface.co/EleutherAI/gpt-j-6B),
-# MAGIC the Alpaca dataset is licensed under [Creative Commons NonCommercial (CC BY-NC 4.0)](https://huggingface.co/datasets/tatsu-lab/alpaca).
-
-# COMMAND ----------
-
-# MAGIC !wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/libcusparse-dev-11-3_11.5.0.58-1_amd64.deb -O /tmp/libcusparse-dev-11-3_11.5.0.58-1_amd64.deb && \
-# MAGIC   wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/libcublas-dev-11-3_11.5.1.109-1_amd64.deb -O /tmp/libcublas-dev-11-3_11.5.1.109-1_amd64.deb && \
-# MAGIC   wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/libcusolver-dev-11-3_11.1.2.109-1_amd64.deb -O /tmp/libcusolver-dev-11-3_11.1.2.109-1_amd64.deb && \
-# MAGIC   wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/libcurand-dev-11-3_10.2.4.109-1_amd64.deb -O /tmp/libcurand-dev-11-3_10.2.4.109-1_amd64.deb && \
-# MAGIC   dpkg -i /tmp/libcusparse-dev-11-3_11.5.0.58-1_amd64.deb && \
-# MAGIC   dpkg -i /tmp/libcublas-dev-11-3_11.5.1.109-1_amd64.deb && \
-# MAGIC   dpkg -i /tmp/libcusolver-dev-11-3_11.1.2.109-1_amd64.deb && \
-# MAGIC   dpkg -i /tmp/libcurand-dev-11-3_10.2.4.109-1_amd64.deb
-
-# COMMAND ----------
-
-# MAGIC %pip install -r requirements.txt
-
-# COMMAND ----------
-
-# MAGIC %load_ext autoreload
-# MAGIC %autoreload 2
-
-# COMMAND ----------
-
 import logging
+from subprocess import run
+from pathlib import Path
+
 
 logging.basicConfig(
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s", level=logging.INFO, datefmt="%Y-%m-%d %H:%M:%S"
@@ -57,10 +14,6 @@ logging.getLogger("sh.command").setLevel(logging.ERROR)
 import os
 from datetime import datetime
 from training.trainer import load_training_dataset, load_tokenizer
-
-dbutils.widgets.text("num_gpus", "", "num_gpus")
-dbutils.widgets.text("local_training_root", "", "local_training_root")
-dbutils.widgets.text("dbfs_output_root", "", "dbfs_output_root")
 
 # COMMAND ----------
 
@@ -80,57 +33,33 @@ deepspeed_config = os.path.join(root_path, "config/ds_z3_bf16_config.json")
 dolly_training_dir_name = "dolly_training"
 
 # Use the local training root path if it was provided.  Otherwise try to find a sensible default.
-local_training_root = dbutils.widgets.get("local_training_root")
-if not local_training_root:
-    # Use preferred path when working in a Databricks cluster if it exists.
-    if os.path.exists("/local_disk0"):
-        local_training_root = os.path.join("/local_disk0", dolly_training_dir_name)
-    # Otherwise use the home directory.
-    else:
-        local_training_root = os.path.join(os.path.expanduser('~'), dolly_training_dir_name)
-
-dbfs_output_root = dbutils.widgets.get("dbfs_output_root")
-if not dbfs_output_root:
-    dbfs_output_root = f"/dbfs/{dolly_training_dir_name}"
+local_training_root = os.path.join(os.path.expanduser('~'), dolly_training_dir_name)
 
 os.makedirs(local_training_root, exist_ok=True)
-os.makedirs(dbfs_output_root, exist_ok=True)
 
 local_output_dir = os.path.join(local_training_root, checkpoint_dir_name)
-dbfs_output_dir = os.path.join(dbfs_output_root, checkpoint_dir_name)
-
-num_gpus_flag = ""
-num_gpus = dbutils.widgets.get("num_gpus")
-if num_gpus:
-    num_gpus = int(num_gpus)
-    num_gpus_flag = f"--num_gpus={num_gpus}"
 
 tensorboard_display_dir = f"{local_output_dir}/runs"
 
 print(f"Local Output Dir: {local_output_dir}")
-print(f"DBFS Output Dir: {dbfs_output_dir}")
 print(f"Tensorboard Display Dir: {tensorboard_display_dir}")
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-# COMMAND ----------
 
-# MAGIC %load_ext tensorboard
-# MAGIC %tensorboard --logdir '{tensorboard_display_dir}'
 
-# COMMAND ----------
-
-# MAGIC !deepspeed {num_gpus_flag} \
-# MAGIC     --module training.trainer \
-# MAGIC     --deepspeed {deepspeed_config} \
-# MAGIC     --epochs 1 \
-# MAGIC     --local-output-dir {local_output_dir} \
-# MAGIC     --dbfs-output-dir {dbfs_output_dir} \
-# MAGIC     --per-device-train-batch-size 8 \
-# MAGIC     --per-device-eval-batch-size 8 \
-# MAGIC     --lr 1e-5
-
-# COMMAND ----------
+current_filepath = str(Path(os.path.realpath(__file__)).parent)
+run(" ".join([
+    f"HF_DATASETS_CACHE={current_filepath}/.cache/huggingface/datasets/",
+    "deepspeed",
+    "--module", "training.trainer",
+    "--deepspeed", f"{deepspeed_config}",
+    "--epochs", "1",
+    "--local-output-dir", f"{local_output_dir}",
+    "--per-device-train-batch-size", "8",
+    "--per-device-eval-batch-size", "8",
+    "--lr", "1e-5",
+]), shell=True)
 
 from training.generate import generate_response, load_model_tokenizer_for_generate
 
@@ -152,3 +81,4 @@ for instruction in instructions:
     response = generate_response(instruction, model=model, tokenizer=tokenizer)
     if response:
         print(f"Instruction: {instruction}\n\n{response}\n\n-----------\n")
+
